@@ -66,6 +66,10 @@ bool Accel::rayIntersect(const Ray3f &ray_, Intersection &its, bool shadowRay) c
 
         Point3f p0 = V.col(idx0), p1 = V.col(idx1), p2 = V.col(idx2);
 
+        its.bary = bary;
+
+        its.tri_index = Point3f(idx0, idx1, idx2);
+
         /* Compute the intersection positon accurately
            using barycentric coordinates */
         its.p = bary.x() * p0 + bary.y() * p1 + bary.z() * p2;
