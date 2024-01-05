@@ -25,3 +25,8 @@ rules.ninja
 *.opendb
 Debug
 x64
+
+scenes/cubemap/Indoor/light.txt
+scenes/cubemap/Indoor/transport.txt
+scenes/prt.exr
+scenes/prt.png
