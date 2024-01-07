@@ -26,7 +26,16 @@ rules.ninja
 Debug
 x64
 
+scenes/cubemap/CornellBox/light.txt
+scenes/cubemap/CornellBox/transport.txt
+
+scenes/cubemap/GraceCathedral/light.txt
+scenes/cubemap/GraceCathedral/transport.txt
+
 scenes/cubemap/Indoor/light.txt
 scenes/cubemap/Indoor/transport.txt
+
+scenes/cubemap/Skybox/light.txt
+scenes/cubemap/Skybox/transport.txt
 scenes/prt.exr
 scenes/prt.png
