@@ -187,6 +187,76 @@ public:
 
 #define DiffuseAlbedo 0.5f // find in diffuse.cpp's getColor() (same value in prt.xml)
 
+    std::unique_ptr<std::vector<double>> computeInterReflectionSH(Eigen::MatrixXf *directTransportSHCoeffs, const Point3f &p, const Normal3f &n, const Scene *scene, int bounces)
+    {
+        std::unique_ptr<std::vector<double>> coeffs(new std::vector<double>());
+        coeffs->assign(SHCoeffLength, 0.0);
+
+        if (bounces == 0)
+        {
+            return coeffs;
+        }
+
+        // copy from sh::ProjectFuntion
+        // This is the approach demonstrated in [1] and is useful for arbitrary
+        // functions on the sphere that are represented analytically.
+        const int sample_side = static_cast<int>(floor(sqrt(m_SampleCount)));
+
+        // generate sample_side^2 uniformly and stratified samples over the sphere
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<> rng(0.0, 1.0);
+        for (int t = 0; t < sample_side; t++)
+        {
+            for (int p = 0; p < sample_side; p++)
+            {
+                double alpha = (t + rng(gen)) / sample_side;
+                double beta = (p + rng(gen)) / sample_side;
+                // See http://www.bogotobogo.com/Algorithms/uniform_distribution_sphere.php
+                double phi = 2.0 * M_PI * beta;
+                double theta = acos(2.0 * alpha - 1.0);
+
+                Eigen::Array3d d = sh::ToVector(phi, theta);
+                const auto wi = Vector3f(d.x(), d.y(), d.z());
+                double H = wi.normalized().dot(n.normalized());
+                Intersection its;
+                if (H > 0.0 && scene->rayIntersect(Ray3f(p, wi.normalized()), its))
+                {
+                    Point3f &q = its.p;
+                    Point3f &tri = its.tri_index;
+                    Vector3f &bary = its.bary;
+                    MatrixXf vertexNormals = its.mesh->getVertexNormals();
+
+                    auto interpolateNormal = Normal3f(vertexNormals.col(tri.x()).normalized() * bary.x() +
+                                                      vertexNormals.col(tri.y()).normalized() * bary.y() +
+                                                      vertexNormals.col(tri.z()).normalized() * bary.z())
+                                                 .normalized();
+                    auto restBouncesCoeffs = computeInterReflectionSH(directTransportSHCoeffs, q, interpolateNormal, scene, bounces - 1);
+
+                    for (int i = 0; i < SHCoeffLength; i++)
+                    {
+                        auto interpolateSH = (directTransportSHCoeffs->col(tri.x()).coeffRef(i) * bary.x() +
+                                              directTransportSHCoeffs->col(tri.y()).coeffRef(i) * bary.y() +
+                                              directTransportSHCoeffs->col(tri.z()).coeffRef(i) * bary.z());
+
+                        (*coeffs)[i] += (interpolateSH + (*restBouncesCoeffs)[i]) * H * DiffuseAlbedo / M_PI;
+                    }
+                }
+            }
+        }
+
+        // scale by the probability of a particular sample, which is
+        // 4pi/sample_side^2. 4pi for the surface area of a unit sphere, and
+        // 1/sample_side^2 for the number of samples drawn uniformly.
+        double weight = 4.0 * M_PI / (sample_side * sample_side);
+        for (unsigned int i = 0; i < coeffs->size(); i++)
+        {
+            (*coeffs)[i] *= weight;
+        }
+
+        return coeffs;
+    }
+
     virtual void preprocess(const Scene *scene) override
     {
 
@@ -247,6 +317,16 @@ public:
         if (m_Type == Type::Interreflection)
         {
             // TODO: leave for bonus
+            for (int i = 0; i < mesh->getVertexCount(); i++)
+            {
+                const Point3f &v = mesh->getVertexPositions().col(i);
+                const Normal3f &n = mesh->getVertexNormals().col(i);
+                auto indirectCoeffs = computeInterReflectionSH(&m_TransportSHCoeffs, v, n, scene, m_Bounce);
+                for (int j = 0; j < SHCoeffLength; j++)
+                {
+                    m_TransportSHCoeffs.col(i).coeffRef(j) += (*indirectCoeffs)[j];
+                }
+            }
         }
 
         // Save in face format
